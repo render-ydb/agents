@@ -30,10 +30,10 @@ import {
   ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
-  SuggestionPrimitive,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
   useAuiState,
+  useComposerRuntime,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -195,28 +195,38 @@ const ThreadWelcome: FC = () => {
   );
 };
 
+// 静态建议问题 — 直接在这里定义，不依赖 runtime suggestions 状态
+const STATIC_SUGGESTIONS = [
+  { prompt: "用简洁的语言解释量子纠缠是什么" },
+  { prompt: "帮我写一个 React 自定义 Hook，用于防抖输入" },
+  { prompt: "列出 5 个提高代码可读性的实用技巧" },
+  { prompt: "解释 TCP 三次握手的过程" },
+];
+
 const ThreadSuggestions: FC = () => {
   return (
     <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
+      {STATIC_SUGGESTIONS.map((s) => (
+        <ThreadSuggestionItem key={s.prompt} prompt={s.prompt} />
+      ))}
     </div>
   );
 };
 
-const ThreadSuggestionItem: FC = () => {
+const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
+  const composer = useComposerRuntime();
   return (
     <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send asChild>
-        <Button
-          variant="ghost"
-          className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
-        >
-          <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
-          <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
-        </Button>
-      </SuggestionPrimitive.Trigger>
+      <Button
+        variant="ghost"
+        className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+        onClick={() => {
+          composer.setText(prompt);
+          composer.send();
+        }}
+      >
+        {prompt}
+      </Button>
     </div>
   );
 };
