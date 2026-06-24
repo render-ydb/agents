@@ -38,6 +38,7 @@ import {
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
 import { DirectiveText } from "@/components/assistant-ui/directive-text";
 import { useMentionConfig } from "@/components/assistant-ui/mention-config";
+import { useSlashCommandConfig } from "@/components/assistant-ui/slash-command-config";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 import {
   ArrowDownIcon,
@@ -237,6 +238,7 @@ const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 
 const Composer: FC = () => {
   const mentionConfig = useMentionConfig();
+  const slashConfig = useSlashCommandConfig();
 
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
@@ -248,7 +250,7 @@ const Composer: FC = () => {
           >
             <ComposerAttachments />
             <LexicalComposerInput
-              placeholder="输入消息... 输入 @ 切换 AI 角色"
+              placeholder="输入消息... @ 切换角色  / 快捷命令"
               className="aui-composer-input"
               autoFocus
               aria-label="Message input"
@@ -257,7 +259,7 @@ const Composer: FC = () => {
           </div>
         </ComposerPrimitive.AttachmentDropzone>
 
-        {/* @ Mentions 弹出选择器 */}
+        {/* @ Mentions 弹出选择器 — 角色/风格切换 */}
         <ComposerTriggerPopover
           char="@"
           adapter={mentionConfig.adapter}
@@ -268,6 +270,16 @@ const Composer: FC = () => {
           emptyCategoriesLabel="暂无可用选项"
           emptyItemsLabel="没有匹配结果"
           loadingLabel="加载中…"
+        />
+
+        {/* / Slash Commands 弹出选择器 — 快捷动作 */}
+        <ComposerTriggerPopover
+          char="/"
+          adapter={slashConfig.adapter}
+          action={slashConfig.action}
+          iconMap={slashConfig.iconMap}
+          fallbackIcon={slashConfig.fallbackIcon}
+          emptyItemsLabel="没有匹配的命令"
         />
       </ComposerPrimitive.Root>
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>
