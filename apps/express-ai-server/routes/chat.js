@@ -240,15 +240,54 @@ function buildSystemFromMentions(text) {
 }
 
 /**
+ * 从 UI messages 中提取引用信息，将引用文本作为 blockquote 注入到消息内容前。
+ * 引用数据存储在 message.metadata.custom.quote 中。
+ */
+function injectQuoteContext(messages) {
+  return messages.map((msg) => {
+    const quote = msg.metadata?.custom?.quote;
+    if (!quote?.text || msg.role !== "user") return msg;
+
+    // 将引用文本格式化为 markdown blockquote，注入到消息 parts 前面
+    const quotePart = {
+      type: "text",
+      text: `> [引用]\n> ${quote.text.split("\n").join("\n> ")}\n\n`,
+    };
+
+    // 如果消息有 parts 数组（assistant-ui 格式），在前面插入引用 part
+    if (Array.isArray(msg.parts)) {
+      return {
+        ...msg,
+        parts: [quotePart, ...msg.parts],
+      };
+    }
+
+    // 如果消息有 content 字段（纯文本），在前面拼接
+    if (typeof msg.content === "string") {
+      return {
+        ...msg,
+        content: `> [引用]\n> ${quote.text.split("\n").join("\n> ")}\n\n${msg.content}`,
+      };
+    }
+
+    return msg;
+  });
+}
+
+/**
  * 调用层用官方 @anthropic-ai/sdk，只在出口把原生流事件转换成
  * AI SDK 的 UI message stream，前端 assistant-ui 零改动。
  */
 router.post("/", async (req, res) => {
   const { messages, system } = req.body;
 
+  // 注入引用上下文（将 quote metadata 转换为消息内容）
+  const messagesWithQuote = injectQuoteContext(messages);
+
+
   // UI messages -> AI SDK ModelMessages（去掉前端包装）
 
-  const modelMessages = await convertToModelMessages(messages);
+  const modelMessages = await convertToModelMessages(messagesWithQuote);
 
 
   // ModelMessages -> Anthropic SDK 格式（处理 image/file parts）
@@ -270,7 +309,7 @@ router.post("/", async (req, res) => {
   const finalSystem = mentionSystem || (typeof system === "string" ? system : undefined);
 
   const uiStream = createUIMessageStream({
-    originalMessages: messages,
+    originalMessages: messagesWithQuote,
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
 
