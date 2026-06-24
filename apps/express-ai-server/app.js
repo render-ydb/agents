@@ -6,6 +6,7 @@ const logger = require("morgan");
 const cookieParser = require("cookie-parser");
 
 const chatRouter = require("./routes/chat");
+const suggestionsRouter = require("./routes/suggestions");
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(cookieParser());
 
 // 路由
 app.use("/api/chat", chatRouter);
+app.use("/api/suggestions", suggestionsRouter);
 
 // 健康检查
 app.get("/health", (req, res) => {

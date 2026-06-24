@@ -44,6 +44,7 @@ import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigg
 import { DirectiveText } from "@/components/assistant-ui/directive-text";
 import { useMentionConfig } from "@/components/assistant-ui/mention-config";
 import { useSlashCommandConfig } from "@/components/assistant-ui/slash-command-config";
+import { useDynamicSuggestions } from "@/hooks/useDynamicSuggestions";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 import {
   ArrowDownIcon,
@@ -57,6 +58,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
+  SparklesIcon,
   SquareIcon,
 } from "lucide-react";
 import {
@@ -149,6 +151,8 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
+
+            <FollowUpSuggestions />
           </div>
 
           <ThreadPrimitive.ViewportFooter
@@ -239,6 +243,51 @@ const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       >
         {prompt}
       </Button>
+    </div>
+  );
+};
+
+const FollowUpSuggestions: FC = () => {
+  const { suggestions, isLoading } = useDynamicSuggestions();
+  const composer = useComposerRuntime();
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+
+  // 运行中或无建议时不渲染
+  if (isRunning || (suggestions.length === 0 && !isLoading)) return null;
+
+  return (
+    <div className="fade-in animate-in duration-300 flex flex-col gap-2 px-2">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <SparklesIcon className="size-3.5" />
+        <span className="text-xs font-medium">推荐追问</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {isLoading ? (
+          // 加载态：3 个骨架 pill
+          <>
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-8 w-24 animate-pulse rounded-full bg-muted"
+              />
+            ))}
+          </>
+        ) : (
+          suggestions.map((s) => (
+            <Button
+              key={s.prompt}
+              variant="ghost"
+              className="fade-in slide-in-from-bottom-1 animate-in text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal transition-colors duration-150"
+              onClick={() => {
+                composer.setText(s.prompt);
+                composer.send();
+              }}
+            >
+              {s.prompt}
+            </Button>
+          ))
+        )}
+      </div>
     </div>
   );
 };
