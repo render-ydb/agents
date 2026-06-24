@@ -13,6 +13,7 @@ import {
   useChatRuntime,
   AssistantChatTransport,
 } from "@assistant-ui/react-ai-sdk";
+import { ImageGenToolUI } from "./components/assistant-ui/image-gen-tool-ui";
 
 // InMemoryThreadListAdapter 稳定实例，避免每次渲染重建
 const threadListAdapter = new InMemoryThreadListAdapter();
@@ -40,6 +41,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <ImageGenToolUI />
       <DevToolsModal/>
       {children}
     </AssistantRuntimeProvider>

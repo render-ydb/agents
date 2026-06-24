@@ -7,6 +7,7 @@ import {
 } from "@assistant-ui/react";
 import {
   FileTextIcon,
+  ImageIcon,
   LanguagesIcon,
   ListIcon,
   EraserIcon,
@@ -102,6 +103,23 @@ export function useSlashCommandConfig() {
         },
       },
       {
+        id: "image",
+        label: "生成图片",
+        description: "根据描述生成图片（输入后跟描述文字）",
+        icon: "Image",
+        execute: () => {
+          const currentText = (composerRuntime.getState().text || "").trim();
+          if (currentText) {
+            composerRuntime.setText(
+              `请根据以下描述生成一张图片：${currentText}`,
+            );
+            composerRuntime.send();
+          } else {
+            composerRuntime.setText("请根据以下描述生成一张图片：");
+          }
+        },
+      },
+      {
         id: "clear",
         label: "清空对话",
         description: "开始一个新的对话",
@@ -122,6 +140,7 @@ export function useSlashCommandConfig() {
 /** 图标映射 */
 const ICON_MAP: Record<string, FC<{ className?: string }>> = {
   FileText: FileTextIcon,
+  Image: ImageIcon,
   Languages: LanguagesIcon,
   Code: CodeIcon,
   Table: TableIcon,

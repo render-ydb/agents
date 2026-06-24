@@ -5,8 +5,81 @@ const {
   createUIMessageStream,
   pipeUIMessageStreamToResponse,
 } = require("ai");
+const { generateImage } = require("ai");
+const { createOpenAI } = require("@ai-sdk/openai");
 
 const router = express.Router();
+
+// OpenAI provider（图片生成用，复用 LiteLLM proxy）
+const openai = createOpenAI({
+  apiKey: (process.env.API_KEY || "").trim(),
+  baseURL: process.env.API_BASE_URL || "https://api.openai.com/v1",
+});
+
+/**
+ * 可供 LLM 调用的工具定义（Anthropic tool format）
+ */
+const TOOLS = [
+  {
+    name: "generate_image",
+    description:
+      "Generate an image based on user's description. Use this tool when the user explicitly asks to create, draw, generate, or design an image/picture/illustration.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "A detailed image generation prompt in English. Translate and expand the user's request into a clear, descriptive English prompt suitable for image generation.",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+];
+
+/**
+ * 为发回给 LLM 的 tool_result 构建精简摘要。
+ * 避免将 base64 图片等大数据发回 Anthropic 撑爆上下文窗口。
+ */
+function buildToolResultForLLM(toolName, output) {
+  if (toolName === "generate_image") {
+    // 只告诉 LLM 图片生成成功了，不发 base64
+    const parts = ["Image generated successfully."];
+    if (output.revisedPrompt) {
+      parts.push(`Revised prompt: "${output.revisedPrompt}"`);
+    }
+    parts.push(`Format: ${output.mimeType || "image/png"}`);
+    return parts.join(" ");
+  }
+  // 其他工具直接序列化（注意控制大小）
+  return JSON.stringify(output);
+}
+
+/**
+ * 执行工具调用，返回结果
+ */
+async function executeTool(toolName, input) {
+  if (toolName === "generate_image") {
+    console.log("[chat/tool] Generating image for:", input.prompt?.slice(0, 100));
+    const result = await generateImage({
+      model: openai.image("openai/gpt-image-2"),
+      prompt: input.prompt,
+    });
+    const revisedPrompt =
+      result.providerMetadata?.openai?.revisedPrompt ??
+      result.providerMetadata?.openai?.revised_prompt;
+    const image = `data:${result.image.mimeType || "image/png"};base64,${result.image.base64}`;
+    const mimeType = result.image.mimeType || "image/png";
+    console.log("[chat/tool] Image generated, mimeType:", mimeType);
+    return {
+      image,
+      mimeType,
+      ...(typeof revisedPrompt === "string" && { revisedPrompt }),
+    };
+  }
+  return { error: `Unknown tool: ${toolName}` };
+}
 
 // 原汁原味的 Anthropic 官方客户端
 // 读 .env 里的 API_KEY / API_BASE_URL / MODEL
@@ -291,7 +364,7 @@ router.post("/", async (req, res) => {
 
 
   // ModelMessages -> Anthropic SDK 格式（处理 image/file parts）
-  const anthropicMessages = toAnthropicMessages(modelMessages);
+  let anthropicMessages = toAnthropicMessages(modelMessages);
 
   // 从用户最后一条消息中提取 @mentions 指令，动态生成 system prompt
   const lastUserMsg = modelMessages.filter((m) => m.role === "user").pop();
@@ -313,65 +386,193 @@ router.post("/", async (req, res) => {
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
 
-      // 官方 SDK 的流式接口
-      const stream = client.messages.stream({
-        model: MODEL,
-        max_tokens: 4096,
-        system: finalSystem,
-        messages: anthropicMessages,
-      });
+      /**
+       * 流式处理一次 Anthropic 调用，返回 { stopReason, toolCalls }
+       * toolCalls: [{ id, name, input }]
+       */
+      async function streamAnthropicResponse(msgs, opts = {}) {
+        const stream = client.messages.stream({
+          model: MODEL,
+          max_tokens: 4096,
+          system: finalSystem,
+          messages: msgs,
+          tools: TOOLS,
+          ...opts,
+        });
 
-      // Anthropic block index -> UI chunk id，保证 start/delta/end 对齐
-      const blockUiIds = new Map();
+        // Anthropic block index -> { uiId, type, toolCallId?, toolName?, inputJson? }
+        const blockMeta = new Map();
+        let stopReason = "end_turn";
+        const toolCalls = [];
 
-      for await (const event of stream) {
-        switch (event.type) {
-          case "message_start":
-            break;
+        for await (const event of stream) {
+          switch (event.type) {
+            case "message_start":
+              break;
 
-          case "content_block_start": {
-            const { index, content_block } = event;
-            if (content_block.type === "text") {
-              const id = nextBlockId("text");
-              blockUiIds.set(index, id);
-              writer.write({ type: "text-start", id });
-            } else if (content_block.type === "thinking") {
-              const id = nextBlockId("rs");
-              blockUiIds.set(index, id);
-              writer.write({ type: "reasoning-start", id });
+            case "content_block_start": {
+              const { index, content_block } = event;
+              if (content_block.type === "text") {
+                const id = nextBlockId("text");
+                blockMeta.set(index, { uiId: id, type: "text" });
+                writer.write({ type: "text-start", id });
+              } else if (content_block.type === "thinking") {
+                const id = nextBlockId("rs");
+                blockMeta.set(index, { uiId: id, type: "thinking" });
+                writer.write({ type: "reasoning-start", id });
+              } else if (content_block.type === "tool_use") {
+                const toolCallId = content_block.id;
+                const toolName = content_block.name;
+                blockMeta.set(index, {
+                  uiId: null,
+                  type: "tool_use",
+                  toolCallId,
+                  toolName,
+                  inputJson: "",
+                });
+                writer.write({
+                  type: "tool-input-start",
+                  toolCallId,
+                  toolName,
+                });
+              }
+              break;
             }
-            // tool_use 等暂不处理（前端未启用工具）
-            break;
-          }
 
-          case "content_block_delta": {
-            const { index, delta } = event;
-            const id = blockUiIds.get(index);
-            if (!id) break;
-            if (delta.type === "text_delta") {
-              writer.write({ type: "text-delta", id, delta: delta.text });
-            } else if (delta.type === "thinking_delta") {
-              writer.write({ type: "reasoning-delta", id, delta: delta.thinking });
+            case "content_block_delta": {
+              const { index, delta } = event;
+              const meta = blockMeta.get(index);
+              if (!meta) break;
+
+              if (meta.type === "text" && delta.type === "text_delta") {
+                writer.write({ type: "text-delta", id: meta.uiId, delta: delta.text });
+              } else if (meta.type === "thinking" && delta.type === "thinking_delta") {
+                writer.write({ type: "reasoning-delta", id: meta.uiId, delta: delta.thinking });
+              } else if (meta.type === "tool_use" && delta.type === "input_json_delta") {
+                meta.inputJson += delta.partial_json;
+                writer.write({
+                  type: "tool-input-delta",
+                  toolCallId: meta.toolCallId,
+                  inputTextDelta: delta.partial_json,
+                });
+              }
+              break;
             }
-            break;
-          }
 
-          case "content_block_stop": {
-            const id = blockUiIds.get(event.index);
-            if (!id) break;
-            if (id.startsWith("text_")) {
-              writer.write({ type: "text-end", id });
-            } else {
-              writer.write({ type: "reasoning-end", id });
+            case "content_block_stop": {
+              const meta = blockMeta.get(event.index);
+              if (!meta) break;
+
+              if (meta.type === "text") {
+                writer.write({ type: "text-end", id: meta.uiId });
+              } else if (meta.type === "thinking") {
+                writer.write({ type: "reasoning-end", id: meta.uiId });
+              } else if (meta.type === "tool_use") {
+                // 解析完整的 tool input JSON
+                let input = {};
+                try {
+                  input = JSON.parse(meta.inputJson || "{}");
+                } catch (e) {
+                  console.warn("[chat] Failed to parse tool input:", meta.inputJson);
+                }
+                writer.write({
+                  type: "tool-input-available",
+                  toolCallId: meta.toolCallId,
+                  toolName: meta.toolName,
+                  input,
+                });
+                toolCalls.push({
+                  id: meta.toolCallId,
+                  name: meta.toolName,
+                  input,
+                });
+              }
+              blockMeta.delete(event.index);
+              break;
             }
-            blockUiIds.delete(event.index);
-            break;
-          }
 
-          case "message_delta":
-          case "message_stop":
-            break;
+            case "message_delta": {
+              if (event.delta?.stop_reason) {
+                stopReason = event.delta.stop_reason;
+              }
+              break;
+            }
+
+            case "message_stop":
+              break;
+          }
         }
+
+        return { stopReason, toolCalls };
+      }
+
+      // 第一次调用
+      let { stopReason, toolCalls } = await streamAnthropicResponse(anthropicMessages);
+
+      // Tool use loop：如果 LLM 要求调用工具，执行后继续对话
+      // 最多循环 5 次防止无限递归
+      let loopCount = 0;
+      while (stopReason === "tool_use" && toolCalls.length > 0 && loopCount < 5) {
+        loopCount++;
+
+        // 构建 assistant message（包含 tool_use blocks）
+        const assistantContent = toolCalls.map((tc) => ({
+          type: "tool_use",
+          id: tc.id,
+          name: tc.name,
+          input: tc.input,
+        }));
+
+        // 执行每个 tool call 并收集结果
+        const toolResults = [];
+        for (const tc of toolCalls) {
+          try {
+            const output = await executeTool(tc.name, tc.input);
+
+            // 发给前端的是完整数据（含 base64 图片），用于渲染
+            writer.write({
+              type: "tool-output-available",
+              toolCallId: tc.id,
+              output,
+            });
+
+            // 发回给 Anthropic 的只是文本摘要，避免 base64 图片撑爆上下文
+            const toolResultForLLM = buildToolResultForLLM(tc.name, output);
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: tc.id,
+              content: toolResultForLLM,
+            });
+          } catch (err) {
+            console.error(`[chat/tool] Error executing ${tc.name}:`, err);
+            const errorOutput = { error: err.message || "Tool execution failed" };
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: tc.id,
+              is_error: true,
+              content: JSON.stringify(errorOutput),
+            });
+            writer.write({
+              type: "tool-output-available",
+              toolCallId: tc.id,
+              output: errorOutput,
+            });
+          }
+        }
+
+        // 将 tool results 追加到对话继续请求 LLM
+        const continuedMessages = [
+          ...anthropicMessages,
+          { role: "assistant", content: assistantContent },
+          { role: "user", content: toolResults },
+        ];
+
+        // 继续流式调用（LLM 基于 tool result 生成最终回复）
+        const next = await streamAnthropicResponse(continuedMessages);
+        stopReason = next.stopReason;
+        toolCalls = next.toolCalls;
+        // 更新 anthropicMessages 以支持多轮 tool call
+        anthropicMessages = continuedMessages;
       }
 
       writer.write({ type: "finish" });
