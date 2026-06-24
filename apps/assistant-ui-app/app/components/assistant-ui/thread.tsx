@@ -35,6 +35,10 @@ import {
   useAuiState,
   useComposerRuntime,
 } from "@assistant-ui/react";
+import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
+import { DirectiveText } from "@/components/assistant-ui/directive-text";
+import { useMentionConfig } from "@/components/assistant-ui/mention-config";
+import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -232,25 +236,41 @@ const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 };
 
 const Composer: FC = () => {
+  const mentionConfig = useMentionConfig();
+
   return (
-    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone asChild>
-        <div
-          data-slot="aui_composer-shell"
-          className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))] dark:shadow-none"
-        >
-          <ComposerAttachments />
-          <ComposerPrimitive.Input
-            placeholder="Send a message..."
-            className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
-            rows={1}
-            autoFocus
-            aria-label="Message input"
-          />
-          <ComposerAction />
-        </div>
-      </ComposerPrimitive.AttachmentDropzone>
-    </ComposerPrimitive.Root>
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+        <ComposerPrimitive.AttachmentDropzone asChild>
+          <div
+            data-slot="aui_composer-shell"
+            className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))] dark:shadow-none"
+          >
+            <ComposerAttachments />
+            <LexicalComposerInput
+              placeholder="输入消息... 输入 @ 切换 AI 角色"
+              className="aui-composer-input"
+              autoFocus
+              aria-label="Message input"
+            />
+            <ComposerAction />
+          </div>
+        </ComposerPrimitive.AttachmentDropzone>
+
+        {/* @ Mentions 弹出选择器 */}
+        <ComposerTriggerPopover
+          char="@"
+          adapter={mentionConfig.adapter}
+          directive={mentionConfig.directive}
+          iconMap={mentionConfig.iconMap}
+          fallbackIcon={mentionConfig.fallbackIcon}
+          backLabel="返回"
+          emptyCategoriesLabel="暂无可用选项"
+          emptyItemsLabel="没有匹配结果"
+          loadingLabel="加载中…"
+        />
+      </ComposerPrimitive.Root>
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 };
 
@@ -495,7 +515,7 @@ const UserMessage: FC = () => {
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
-          <MessagePrimitive.Parts />
+          <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
           <UserActionBar />

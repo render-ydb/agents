@@ -134,3 +134,102 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* ===== Lexical Composer Input 样式 ===== */
+.aui-lexical-editor {
+  position: relative;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.aui-lexical-input {
+  outline: none;
+  min-height: 2.5rem;
+  max-height: 8rem;
+  width: 100%;
+  resize: none;
+  background: transparent;
+  padding: 0.5rem 0.625rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* 清除 Lexical 内部 <p> 的浏览器默认 margin */
+.aui-lexical-input p {
+  margin: 0;
+  padding: 0;
+}
+
+.aui-lexical-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0.625rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  color: var(--muted-foreground);
+  opacity: 0.8;
+  font-size: 1rem;
+}
+
+/* ===== Trigger Popover 高亮修正 ===== */
+/* 只有真正被 highlighted 的项才显示背景，hover 用更轻的效果 */
+.aui-composer-trigger-popover [data-highlighted] {
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent) !important;
+}
+
+.aui-composer-trigger-popover :not([data-highlighted]) {
+  background: transparent !important;
+}
+
+.aui-composer-trigger-popover :not([data-highlighted]):hover {
+  background: color-mix(in oklab, var(--color-muted) 50%, transparent) !important;
+}
+
+/* ===== Shiki 代码高亮 — 双主题切换 ===== */
+.shiki-highlighted {
+  font-family: "Fira Code", "JetBrains Mono", "SF Mono", Menlo, Monaco,
+    "Cascadia Code", Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Light mode: 使用 --shiki-light 变量 */
+.shiki-highlighted span {
+  color: var(--shiki-light) !important;
+  background-color: var(--shiki-light-bg);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+  text-decoration: var(--shiki-light-text-decoration);
+}
+
+/* Dark mode: 使用 --shiki-dark 变量 */
+.dark .shiki-highlighted span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg);
+  font-style: var(--shiki-dark-font-style);
+  font-weight: var(--shiki-dark-font-weight);
+  text-decoration: var(--shiki-dark-text-decoration);
+}
+
+/* Lexical Directive 芯片（@ mention 选中后在输入框中的样式） */
+.aui-lexical-input [data-lexical-directive] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  background: oklch(0.93 0.03 250);
+  color: oklch(0.4 0.15 250);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+  vertical-align: baseline;
+  user-select: none;
+}
+
+.dark .aui-lexical-input [data-lexical-directive] {
+  background: oklch(0.3 0.05 250);
+  color: oklch(0.75 0.12 250);
+}

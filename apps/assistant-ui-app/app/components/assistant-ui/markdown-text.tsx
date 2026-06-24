@@ -4,6 +4,7 @@ import "@assistant-ui/react-markdown/styles/dot.css";
 
 import {
   type CodeHeaderProps,
+  type SyntaxHighlighterProps,
   MarkdownTextPrimitive,
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
@@ -13,20 +14,10 @@ import { type FC, memo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { ShikiSyntaxHighlighter } from "@/components/assistant-ui/syntax-highlight";
 import { cn } from "@/lib/utils";
 
-const MarkdownTextImpl = () => {
-  return (
-    <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
-      className="aui-md"
-      components={defaultComponents}
-      defer
-    />
-  );
-};
-
-export const MarkdownText = memo(MarkdownTextImpl);
+// ─── CodeHeader ─────────────────────────────────────────────────────────────
 
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard();
@@ -36,7 +27,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   };
 
   return (
-    <div className="aui-code-header-root border-border/50 bg-muted/50 mt-3 flex items-center justify-between rounded-t-xl border border-b-0 px-3.5 py-1.5 text-xs">
+    <div className="aui-code-header-root border-border/50 bg-[oklch(0.96_0_0)] dark:bg-[oklch(0.2_0_0)] mt-3 flex items-center justify-between rounded-t-xl border border-b-0 px-3.5 py-1.5 text-xs">
       <span className="aui-code-header-language text-muted-foreground font-medium lowercase">
         {language}
       </span>
@@ -51,6 +42,8 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
     </div>
   );
 };
+
+// ─── useCopyToClipboard ─────────────────────────────────────────────────────
 
 const useCopyToClipboard = ({
   copiedDuration = 3000,
@@ -75,6 +68,8 @@ const useCopyToClipboard = ({
 
   return { isCopied, copyToClipboard };
 };
+
+// ─── Memoized markdown components (HTML elements only) ──────────────────────
 
 const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
@@ -236,7 +231,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "aui-md-pre border-border/50 bg-muted/30 overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed",
+        "aui-md-pre overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 border-border/50 p-3.5 text-[13px] leading-relaxed bg-[oklch(0.98_0_0)] dark:bg-[oklch(0.16_0_0)]",
         className,
       )}
       {...props}
@@ -249,11 +244,37 @@ const defaultComponents = memoizeMarkdownComponents({
         className={cn(
           !isCodeBlock &&
             "aui-md-inline-code bg-muted rounded-md px-1.5 py-0.5 font-mono text-[0.85em]",
+          isCodeBlock && "font-mono text-[13px] leading-relaxed",
           className,
         )}
         {...props}
       />
     );
   },
-  CodeHeader,
 });
+
+// ─── MarkdownText ───────────────────────────────────────────────────────────
+
+/**
+ * 将 SyntaxHighlighter 和 CodeHeader 直接放入 components 对象。
+ * 注意：不经过 memoizeMarkdownComponents，因为它的 memo 比较函数
+ * 基于 hast node，对于 SyntaxHighlighter 的 code prop 变化无法正确处理。
+ */
+const allComponents: Record<string, any> = {
+  ...defaultComponents,
+  SyntaxHighlighter: ShikiSyntaxHighlighter,
+  CodeHeader,
+};
+
+const MarkdownTextImpl = () => {
+  return (
+    <MarkdownTextPrimitive
+      remarkPlugins={[remarkGfm]}
+      className="aui-md"
+      components={allComponents}
+      defer
+    />
+  );
+};
+
+export const MarkdownText = memo(MarkdownTextImpl);
