@@ -1,6 +1,7 @@
 "use client";
 
 import "@assistant-ui/react-markdown/styles/dot.css";
+import "katex/dist/katex.min.css";
 
 import {
   type CodeHeaderProps,
@@ -10,6 +11,8 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { type FC, memo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
@@ -253,6 +256,20 @@ const defaultComponents = memoizeMarkdownComponents({
   },
 });
 
+// ─── LaTeX 预处理 ──────────────────────────────────────────────────────────
+
+/**
+ * 将 LLM 常用的 \(...\) 和 \[...\] 数学分隔符
+ * 转换为 remark-math 所需的标准 $...$ 和 $$...$$ 格式。
+ */
+function normalizeMathDelimiters(text: string): string {
+  // 块级：\[...\] → $$...$$
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$${math}$$`);
+  // 行内：\(...\) → $...$
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math}$`);
+  return text;
+}
+
 // ─── MarkdownText ───────────────────────────────────────────────────────────
 
 /**
@@ -269,7 +286,9 @@ const allComponents: Record<string, any> = {
 const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      preprocess={normalizeMathDelimiters}
       className="aui-md"
       components={allComponents}
       defer
