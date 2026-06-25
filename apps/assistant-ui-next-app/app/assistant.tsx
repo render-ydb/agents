@@ -1,6 +1,11 @@
 "use client";
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import {
+  SimpleImageAttachmentAdapter,
+  SimpleTextAttachmentAdapter,
+  CompositeAttachmentAdapter,
+} from "@assistant-ui/react";
 import { useStreamRuntime } from "@assistant-ui/react-langchain";
 
 import { Thread } from "@/components/assistant-ui/thread";
@@ -15,6 +20,12 @@ export function Assistant() {
   const runtime = useStreamRuntime({
     assistantId: process.env.NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID!,
     apiUrl,
+    adapters: {
+      attachments: new CompositeAttachmentAdapter([
+        new SimpleImageAttachmentAdapter(),
+        new SimpleTextAttachmentAdapter(),
+      ]),
+    },
   });
 
   return (
